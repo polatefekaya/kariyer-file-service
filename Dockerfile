@@ -9,12 +9,17 @@ COPY src/Kariyer.FileService/Kariyer.FileService.csproj src/Kariyer.FileService/
 RUN dotnet restore src/Kariyer.FileService/Kariyer.FileService.csproj
 
 # Copy the project sources and publish a framework-dependent build.
-# Defensively drop any build output that slipped in from the host: podman does
-# not reliably honor .dockerignore/.containerignore, and a stale host obj/ breaks
-# the build with "MSB3552: Resource file '**/*.resx' cannot be found". Removing it
-# forces publish to re-restore cleanly from the packages cached above.
+# Defensively scrub build output that may have come in from the host context
+# (podman doesn't reliably honor .dockerignore/.containerignore):
+#   - obj/ and bin/ : normal build output
+#   - bin\Debug / obj\Debug : dirs with a LITERAL backslash that the editor's
+#     Roslyn BuildHost writes on macOS. The name isn't matched by bin/obj
+#     ignores, and the backslash corrupts MSBuild globbing, so the SDK keeps
+#     "**/*.resx" (and *.razor/*.cshtml) literal -> "MSB3552 ... cannot be found".
+#     ('bin?*' matches the backslash via ? without needing to quote it.)
 COPY src/Kariyer.FileService/ src/Kariyer.FileService/
 RUN rm -rf src/Kariyer.FileService/obj src/Kariyer.FileService/bin \
+ && find src/Kariyer.FileService -maxdepth 1 '(' -name 'bin?*' -o -name 'obj?*' ')' -exec rm -rf {} + \
  && dotnet publish src/Kariyer.FileService/Kariyer.FileService.csproj \
       -c Release -o /app/publish /p:UseAppHost=false
 

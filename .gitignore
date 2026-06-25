@@ -3,6 +3,13 @@
 [Oo]bj/
 [Oo]ut/
 artifacts/
+# Editor's Roslyn BuildHost writes literal-backslash dirs (bin\Debug) on macOS,
+# which [Bb]in/ does NOT match. ? matches the backslash. These corrupt MSBuild
+# globbing (MSB3552), so they must never be tracked.
+bin?Debug/
+obj?Debug/
+bin?Release/
+obj?Release/
 
 ## .NET / NuGet
 *.user
