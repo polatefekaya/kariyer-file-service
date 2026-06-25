@@ -22,6 +22,11 @@ msbuild.wrn
 *.coveragexml
 coverage*.json
 
+## Local env / secrets (copy .env.example -> .env)
+.env
+.env.*
+!.env.example
+
 ## IDEs / editors
 .vs/
 .idea/
