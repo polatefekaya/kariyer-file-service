@@ -1,0 +1,68 @@
+name: kariyer-file-service
+
+# Self-contained local stack: the file-service + its Garnet cache + a Postgres.
+# 1. cp .env.example .env   (fill in the R2__* + ExternalProvider__Url secrets)
+# 2. docker compose up --build
+#
+# Only the app port (5290) is published to the host; Postgres/Garnet stay on the
+# internal network (so they don't clash with anything you already run locally).
+# For production you point at your managed Postgres/Garnet instead — override
+# ConnectionStrings__DefaultConnection / ConnectionStrings__Garnet and drop the
+# postgres/garnet services + depends_on.
+
+services:
+  fileservice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kariyer-file-service:local
+    ports:
+      - "5290:5290"
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5290
+      # Override the localhost defaults from .env to reach the in-network services.
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-timeofcareer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      ConnectionStrings__Garnet: "garnet:6379,abortConnect=false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      garnet:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5290/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  garnet:
+    image: ghcr.io/microsoft/garnet:latest
+    expose:
+      - "6379"
+    volumes:
+      - garnet-data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-timeofcareer}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-timeofcareer}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  garnet-data:
+  postgres-data:
