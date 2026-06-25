@@ -206,10 +206,17 @@ try
         string serviceUrl = config["ServiceUrl"] ?? throw new ArgumentNullException("R2:ServiceUrl");
 
         var credentials = new Amazon.Runtime.BasicAWSCredentials(accessKey, secretKey);
+
+        // Cloudflare R2 ONLY accepts SigV4. Without a region the SDK emits legacy SigV2
+        // presigned URLs (AWSAccessKeyId/Expires/Signature) which R2 rejects with 401.
+        // Force SigV4 and give it R2's "auto" region.
+        Amazon.AWSConfigsS3.UseSignatureVersion4 = true;
+
         var s3Config = new AmazonS3Config
         {
             ServiceURL = serviceUrl,
-            ForcePathStyle = true // Required for Cloudflare R2 compatibility
+            ForcePathStyle = true, // Required for Cloudflare R2 compatibility
+            AuthenticationRegion = "auto" // R2's region; required for SigV4 signing
         };
 
         return new AmazonS3Client(credentials, s3Config);
