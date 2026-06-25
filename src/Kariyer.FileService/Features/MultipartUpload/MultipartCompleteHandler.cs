@@ -16,7 +16,9 @@ using Kariyer.FileService.Infrastructure.Telemetry;
 namespace Kariyer.FileService.Features.MultipartUpload;
 
 public record CompletedPartDto(int PartNumber, string ETag);
-public record MultipartCompleteRequest(string StorageKey, string UploadId, List<CompletedPartDto> Parts);
+// Parts is optional/ignored — the server resolves the authoritative part list via
+// R2 ListParts. Kept for backward compatibility with older clients.
+public record MultipartCompleteRequest(string StorageKey, string UploadId, List<CompletedPartDto>? Parts = null);
 
 public class MultipartCompleteHandler
 {
@@ -61,12 +63,6 @@ public class MultipartCompleteHandler
             return null;
         }
 
-        if (request.Parts == null || request.Parts.Count == 0)
-        {
-            _logger.LogWarning("Multipart complete blocked: Completed parts list is empty.");
-            return null;
-        }
-
         StoredFile? fileRecord = await _dbContext.StoredFiles.FirstOrDefaultAsync(f => f.StorageKey == request.StorageKey);
         if (fileRecord == null)
         {
@@ -74,18 +70,24 @@ public class MultipartCompleteHandler
             return null;
         }
 
+        // Idempotent retry: if already completed (Active) and present in R2, return it.
+        // (Owner/admin only — non-owners fall through to the not-Pending guard below.)
+        if (fileRecord.Status == "Active"
+            && (fileRecord.UserId == userId || userRole == "admin" || userRole == "super_admin"))
+        {
+            long? existingSize = await _r2Storage.GetObjectSizeAsync(request.StorageKey);
+            if (existingSize is > 0)
+            {
+                _logger.LogInformation("Multipart complete idempotent no-op: '{StorageKey}' already Active.", request.StorageKey);
+                return fileRecord;
+            }
+        }
+
         // Verification: Only Pending files can be completed
         if (fileRecord.Status != "Pending")
         {
             _logger.LogWarning("Multipart complete failed: File '{StorageKey}' is not in Pending status (current status: {Status}).", 
                 request.StorageKey, fileRecord.Status);
-            return null;
-        }
-
-        // Verification: Part numbers must be unique
-        if (request.Parts.Select(p => p.PartNumber).Distinct().Count() != request.Parts.Count)
-        {
-            _logger.LogWarning("Multipart complete failed: Duplicate part numbers found in completion request.");
             return null;
         }
 
@@ -109,11 +111,15 @@ public class MultipartCompleteHandler
 
         try
         {
-            // Map and explicitly sort by PartNumber ascending (Amazon S3 / R2 strict requirement)
-            var s3PartETags = request.Parts
-                .OrderBy(p => p.PartNumber)
-                .Select(p => new PartETag(p.PartNumber, p.ETag))
-                .ToList();
+            // Server-authoritative parts: ask R2 which parts it actually received
+            // (and their ETags). The browser never reads/echoes ETags → no R2 CORS
+            // ExposeHeaders requirement, and clients cannot spoof part ETags.
+            var s3PartETags = await _r2Storage.ListPartsAsync(request.StorageKey, request.UploadId);
+            if (s3PartETags.Count == 0)
+            {
+                _logger.LogWarning("Multipart complete failed: R2 reports no uploaded parts for key '{StorageKey}'.", request.StorageKey);
+                return null;
+            }
 
             // Complete the multipart upload on Cloudflare R2
             bool success = await _r2Storage.CompleteMultipartUploadAsync(request.StorageKey, request.UploadId, s3PartETags);

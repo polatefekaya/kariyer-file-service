@@ -14,5 +14,6 @@ public interface IR2StorageService
     Task<string> InitiateMultipartUploadAsync(string key, string contentType);
     string GeneratePresignedPartUploadUrl(string key, string uploadId, int partNumber, TimeSpan expiration);
     Task<bool> CompleteMultipartUploadAsync(string key, string uploadId, System.Collections.Generic.IEnumerable<Amazon.S3.Model.PartETag> parts);
+    Task<System.Collections.Generic.List<Amazon.S3.Model.PartETag>> ListPartsAsync(string key, string uploadId);
     Task<bool> AbortMultipartUploadAsync(string key, string uploadId);
 }
