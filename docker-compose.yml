@@ -1,14 +1,18 @@
 name: kariyer-file-service
 
-# Self-contained local stack: the file-service + its Garnet cache + a Postgres.
-# 1. cp .env.example .env   (fill in the R2__* + ExternalProvider__Url secrets)
-# 2. docker compose up --build
+# Runs ONLY the file-service in a container. Postgres, Garnet and the OTel
+# collector live in your OTHER compose stacks and are published on the host
+# (:5432, :6380, :4318), so this container reaches them via host.docker.internal.
 #
-# Only the app port (5290) is published to the host; Postgres/Garnet stay on the
-# internal network (so they don't clash with anything you already run locally).
-# For production you point at your managed Postgres/Garnet instead — override
-# ConnectionStrings__DefaultConnection / ConnectionStrings__Garnet and drop the
-# postgres/garnet services + depends_on.
+#   cp .env.example .env          # set secrets + use host.docker.internal hosts (see below)
+#   docker compose up --build     # -> http://localhost:5290/health
+#
+# IMPORTANT: inside a container "127.0.0.1" is the container itself, so in .env the
+# DB / Garnet / OTel hosts must be host.docker.internal (the bridge to your host):
+#   ConnectionStrings__DefaultConnection=Host=host.docker.internal;Port=5432;Database=kariyerzamani_test;Username=postgres;Password=...
+#   ConnectionStrings__Garnet=host.docker.internal:6380
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318
+# Make sure those other stacks are already running before `docker compose up`.
 
 services:
   fileservice:
@@ -21,15 +25,13 @@ services:
     env_file:
       - .env
     environment:
+      # In a container the app MUST bind all interfaces. The .env's
+      # http://127.0.0.1:5290 would only listen on the container loopback, so the
+      # published port could never reach it — this override is required.
       ASPNETCORE_URLS: http://0.0.0.0:5290
-      # Override the localhost defaults from .env to reach the in-network services.
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-timeofcareer};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
-      ConnectionStrings__Garnet: "garnet:6379,abortConnect=false"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      garnet:
-        condition: service_started
+    extra_hosts:
+      # Resolves host.docker.internal on Linux too (it's automatic on Docker Desktop).
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:5290/health"]
       interval: 15s
@@ -37,32 +39,3 @@ services:
       retries: 5
       start_period: 40s
     restart: unless-stopped
-
-  garnet:
-    image: ghcr.io/microsoft/garnet:latest
-    expose:
-      - "6379"
-    volumes:
-      - garnet-data:/data
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-timeofcareer}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    expose:
-      - "5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-timeofcareer}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-volumes:
-  garnet-data:
-  postgres-data:
