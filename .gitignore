@@ -1,0 +1,33 @@
+## .NET build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+artifacts/
+
+## .NET / NuGet
+*.user
+*.userosscache
+*.suo
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+## Test results / coverage
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+
+## IDEs / editors
+.vs/
+.idea/
+*.swp
+.vscode/
+
+## OS
+.DS_Store
+Thumbs.db

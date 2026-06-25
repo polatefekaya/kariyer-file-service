@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -314,6 +315,53 @@ public class R2StorageService : IR2StorageService
             FileServiceDiagnostics.S3OperationDuration.Record(stopwatch.Elapsed.TotalMilliseconds, 
                 new KeyValuePair<string, object?>("operation", "complete_multipart_error"));
             return false;
+        }
+    }
+
+    public async Task<List<PartETag>> ListPartsAsync(string key, string uploadId)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        try
+        {
+            // Server-authoritative part list: R2 tells us exactly which parts it
+            // received (and their ETags), so the browser never needs to read the
+            // ETag header — no R2 CORS ExposeHeaders requirement, and clients
+            // cannot spoof part ETags.
+            var request = new ListPartsRequest
+            {
+                BucketName = _bucketName,
+                Key = key,
+                UploadId = uploadId,
+                MaxParts = 1000
+            };
+
+            var response = await _s3Client.ListPartsAsync(request);
+
+            if (response.IsTruncated == true)
+            {
+                // Our parts are ≥5MB and objects ≤500MB → ≤100 parts, so the single
+                // 1000-part page always covers it. Warn loudly if that ever changes.
+                _logger.LogWarning("ListParts truncated for key '{Key}' (>1000 parts); completion may be incomplete.", key);
+            }
+
+            var parts = response.Parts
+                .Select(p => new PartETag(p.PartNumber, p.ETag))
+                .OrderBy(p => p.PartNumber)
+                .ToList();
+
+            stopwatch.Stop();
+            FileServiceDiagnostics.S3OperationDuration.Record(stopwatch.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("operation", "list_parts"));
+
+            return parts;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing parts for key '{Key}', upload ID '{UploadId}'", key, uploadId);
+            stopwatch.Stop();
+            FileServiceDiagnostics.S3OperationDuration.Record(stopwatch.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("operation", "list_parts_error"));
+            throw;
         }
     }
 
