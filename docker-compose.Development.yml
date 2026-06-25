@@ -21,6 +21,12 @@ services:
     network_mode: host
     env_file:
       - .env
+    environment:
+      # Disable the AWS SDK's default request checksum: otherwise presigned PUT URLs
+      # carry x-amz-checksum / x-amz-sdk-checksum-algorithm in the signature, which a
+      # browser can't reproduce -> the direct-to-R2 PUT fails the signature.
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5290/health"]
       interval: 15s

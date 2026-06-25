@@ -39,9 +39,10 @@ public class R2StorageService : IR2StorageService
                 ContentType = contentType
             };
 
-            // Restrict upload content length dynamically if required
-            request.Headers["Content-Length"] = fileSize.ToString();
-
+            // NOTE: Content-Length is intentionally NOT signed. Signing it forces the
+            // browser's direct-to-R2 PUT to match an exact byte count it can't control,
+            // which fails the signature (the browser sets Content-Length itself). File
+            // size is already validated at presign time from the request DTO.
             string url = _s3Client.GetPreSignedURL(request);
             stopwatch.Stop();
 
