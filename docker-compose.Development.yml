@@ -1,0 +1,30 @@
+name: kariyer-file-service
+
+# Development stack — runs ONLY the file-service, sharing the host network
+# (network_mode: host, same as the other services). It reaches Postgres / Garnet /
+# OTel (running in your other compose stacks on 127.0.0.1:5432 / :6380 / :4318)
+# exactly as your .env already specifies — no host.docker.internal, no port mapping
+# (host networking exposes :5290 on the host directly).
+#
+#   cp .env.example .env        # or use your dev .env (127.0.0.1 hosts are correct here)
+#   podman-compose -f docker-compose.Development.yml up -d --build
+#   # -> http://127.0.0.1:5290/health
+#
+# Make sure your Postgres / Garnet / OTel stacks are up first.
+
+services:
+  fileservice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kariyer-file-service:dev
+    network_mode: host
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5290/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
