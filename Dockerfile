@@ -9,8 +9,13 @@ COPY src/Kariyer.FileService/Kariyer.FileService.csproj src/Kariyer.FileService/
 RUN dotnet restore src/Kariyer.FileService/Kariyer.FileService.csproj
 
 # Copy the project sources and publish a framework-dependent build.
+# Defensively drop any build output that slipped in from the host: podman does
+# not reliably honor .dockerignore/.containerignore, and a stale host obj/ breaks
+# the build with "MSB3552: Resource file '**/*.resx' cannot be found". Removing it
+# forces publish to re-restore cleanly from the packages cached above.
 COPY src/Kariyer.FileService/ src/Kariyer.FileService/
-RUN dotnet publish src/Kariyer.FileService/Kariyer.FileService.csproj \
+RUN rm -rf src/Kariyer.FileService/obj src/Kariyer.FileService/bin \
+ && dotnet publish src/Kariyer.FileService/Kariyer.FileService.csproj \
       -c Release -o /app/publish /p:UseAppHost=false
 
 # ---- runtime stage -------------------------------------------------------
