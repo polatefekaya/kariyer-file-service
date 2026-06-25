@@ -3,6 +3,12 @@
 **/obj/
 **/out/
 artifacts/
+# Editor's Roslyn BuildHost writes literal-backslash "bin\Debug"/"obj\Debug" dirs
+# on macOS; ? matches the backslash so these never enter the build context.
+**/bin?Debug
+**/obj?Debug
+**/bin?Release
+**/obj?Release
 
 # Tests are not part of the runtime image
 tests/
