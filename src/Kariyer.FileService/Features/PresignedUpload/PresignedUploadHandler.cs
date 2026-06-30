@@ -193,8 +193,8 @@ public class PresignedUploadHandler
         var allowedTypes = new HashSet<string>
         {
             "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
-            "video/mp4", "video/webm", "video/ogg",
-            "application/pdf", 
+            "video/mp4", "video/webm", "video/ogg", "video/quicktime",
+            "application/pdf",
             "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         };
@@ -214,6 +214,7 @@ public class PresignedUploadHandler
             "video/mp4" => ext == "mp4",
             "video/webm" => ext == "webm",
             "video/ogg" => ext == "ogg",
+            "video/quicktime" => ext == "mov",
             "application/pdf" => ext == "pdf",
             "application/msword" => ext == "doc",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ext == "docx",
